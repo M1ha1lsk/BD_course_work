@@ -32,3 +32,11 @@ def get_school_role(school_name: str) -> str:
             else:
                 st.error(f"Школа с именем '{school_name}' не найдена.")
                 return None
+            
+def get_school_name_by_id(school_id: int) -> str:
+    query = "SELECT school_name FROM sport_schools WHERE school_id = %s;"
+    with psycopg2.connect(**DB_CONFIG) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (school_id,))
+            result = cur.fetchone()
+            return result[0] if result else "Неизвестная школа"

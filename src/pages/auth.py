@@ -3,6 +3,8 @@ import psycopg2
 from repositories.school import get_school_id_by_name
 from repositories.regions import get_region_id
 from repositories.regions import get_all_regions
+from repositories.redis_repository import RedisRepository
+redis_repo = RedisRepository()
 import bcrypt
 from settings import DB_CONFIG
 
@@ -47,17 +49,22 @@ def authenticate_user(school_name, password):
             if result:
                 stored_password = result[0]
                 
-                # Проверяем, является ли хеш пароля строкой и конвертируем в байты
                 if isinstance(stored_password, str):
                     stored_password = stored_password.encode('utf-8')
                 
-                # Теперь можно безопасно сравнивать пароли
                 if check_password(password, stored_password):
-                    # Сохраняем school_id в session_state
                     school_id = get_school_id_by_name(school_name)
                     if school_id:
+                        # Генерируем токен (упрощённо)
+                        import uuid
+                        token = str(uuid.uuid4())
+                        
+                        # Сохраняем в Redis
+                        redis_repo.store_token(school_name, token)
+                        
                         st.session_state.school_id = school_id
                         st.session_state.school_name = school_name
+                        st.session_state.token = token
                         return True
     return False
 
@@ -75,10 +82,9 @@ def login_or_register():
         if login_btn:
             if authenticate_user(school_name, password):
                 st.success(f"Добро пожаловать, {school_name}!")
-                return {"school_name": school_name}
+                st.rerun()  # Перезагружаем страницу после успешного входа
             else:
                 st.error("Неверное имя или пароль.")
-        return None
 
     elif option == "Регистрация":
         school_name = st.text_input("Название спортивной школы")
@@ -93,22 +99,29 @@ def login_or_register():
             elif password != confirm_password:
                 st.error("Пароли не совпадают.")
             elif register_user(school_name, region_name, password):
-                return {"school_name": school_name}
-        return None
+                st.rerun()  # Перезагружаем страницу после успешной регистрации
 
-def page_func():
+# Основная функция страницы
+def main():
     school_name = st.session_state.get('school_name', None)
+    token = st.session_state.get('token', None)
 
-    if st.session_state.get('school_name', None):
-        st.success(f"Добро пожаловать, {school_name}!")
-        if st.button("Выйти"):
-            for key in st.session_state.keys():
-                del st.session_state[key]  # Сбрасываем состояние
-    elif not st.session_state.get('school_name', None):
+    if school_name and token:
+        # Проверяем токен в Redis
+        if redis_repo.validate_token(token):
+            st.success(f"Добро пожаловать, {school_name}!")
+            if st.button("Выйти"):
+                redis_repo.invalidate_token(token)
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+        else:
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            login_or_register()
+    else:
         login_or_register()
-        if st.button("Выйти"):
-            for key in st.session_state.keys():
-                del st.session_state[key]  # Сбрасываем состояние
 
-page_func()
-
+# Запуск приложения
+if __name__ == "__main__":
+    main()
