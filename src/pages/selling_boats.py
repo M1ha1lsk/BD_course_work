@@ -80,9 +80,8 @@ def show_selling_boats_page(school_name: str):
                     conn.commit()
             
             st.success(f"Эксплуатация лодки {boat_id} началась с {deal_date}. Конец эксплуатации: {end_date}")
-            # Убираем st.rerun() чтобы избежать повторной отправки
-            time.sleep(2)  # Даем время увидеть сообщение
-            st.rerun()  # Используем с осторожностью
+            time.sleep(2)
+            st.rerun()
         except Exception as e:
             st.error(f"Ошибка: {str(e)}")
 
